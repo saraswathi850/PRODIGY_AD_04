@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>XO Battle Arena</title>
+<style>
+  :root{
+    --crimson:#d40055;
+    --bg:#000;
+    --board-bg:#d40055;
+    --cell-bg:#000;
+    --text:#fff;
+  }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Arial,Helvetica,sans-serif}
+  /* Rules (start) screen - Option 1 Crimson style */
+  #startScreen{
+    position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;align-items:center;justify-content:center;
+  }
+  #rulesBox{
+    width:86%;max-width:520px;padding:20px;border-radius:12px;border:2px solid var(--crimson);background:rgba(0,0,0,0.6);
+    color:var(--text);font-size:16px;line-height:1.4;text-align:left;
+  }
+  #startBtn{display:block;margin:18px auto 0;padding:12px 28px;background:var(--crimson);color:#fff;border:none;border-radius:12px;font-size:18px;box-shadow:0 0 18px var(--crimson);cursor:pointer}
+
+  /* Layout */
+  .wrap{max-width:420px;width:92vw;margin:12px auto;padding-bottom:24px}
+  #title{font-size:22px;color:var(--crimson);text-align:center;font-weight:700;margin-top:8px;text-shadow:0 0 14px rgba(212,0,85,0.6)}
+  #score{font-size:16px;text-align:center;margin:8px 0}
+  #gameContainer{position:relative;margin:6px auto;width:92vw;max-width:420px;aspect-ratio:1;display:block}
+
+  /* Board */
+  #board{
+    position:relative;width:100%;height:100%;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);
+    gap:6px;padding:6px;border-radius:10px;background:var(--board-bg);box-shadow:0 0 20px rgba(212,0,85,0.25);
+    z-index:2;overflow:visible;
+  }
+  .cell{
+    background:var(--cell-bg);border:2px solid var(--crimson);border-radius:8px;display:flex;align-items:center;justify-content:center;
+    font-size:10vw;color:var(--text);user-select:none;touch-action:manipulation;
+  }
+  .cell.disabled{pointer-events:none;opacity:0.9}
+
+  /* Victory line (over the board) */
+  #victoryLine{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:4}
+  .lineDiv{position:absolute;height:6px;background:#ff6ea7;border-radius:6px;box-shadow:0 0 12px #ff6ea7;transform-origin:left center;}
+
+  /* Bubble layer inside gameContainer so WebView shows it */
+  #bubbleLayer{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:6;overflow:visible}
+
+  .bubble{position:absolute;font-size:6.5vw;opacity:1;animation:floatUp 1200ms ease-out forwards;filter: drop-shadow(0 0 8px rgba(255,110,167,0.8));}
+  @keyframes floatUp{0%{transform:translateY(0) scale(1);opacity:1}100%{transform:translateY(-90px) scale(0.45);opacity:0}}
+
+  /* Message & quote */
+  #message{font-size:5vw;text-align:center;margin-top:10px;min-height:6vw}
+  #quote{font-size:3.6vw;color:#cfcfcf;text-align:center;min-height:4vw;margin-top:6px;padding:0 6px}
+
+  /* Buttons */
+  .controls{display:flex;gap:10px;justify-content:center;margin-top:12px}
+  button.ctrl{padding:8px 14px;border-radius:10px;border:none;background:var(--crimson);color:#fff;font-size:3.8vw;box-shadow:0 0 12px rgba(212,0,85,0.25);cursor:pointer}
+
+  /* History */
+  #history{margin-top:14px;color:var(--text);font-size:3.6vw}
+  #history table{width:100%;border-collapse:collapse}
+  #history th, #history td{border:1px solid var(--crimson);padding:6px;text-align:center}
+  #history th{background:var(--crimson);color:#fff;font-weight:600}
+  /* responsive adjustments */
+  @media(min-width:520px){
+    #rulesBox{font-size:18px}
+    #title{font-size:28px}
+    .ctrl{font-size:16px}
+    .bubble{font-size:22px}
+  }
+</style>
+</head>
+<body>
+  <!-- Rules Screen (Option 1) -->
+  <div id="startScreen" aria-hidden="false">
+    <div id="rulesBox">
+      <strong>RULES:</strong><br><br>
+      1. Player X always starts.<br>
+      2. Players take turns placing X or O by tapping a square.<br>
+      3. Create a horizontal, vertical or diagonal line of 3 to win.<br>
+      4. When a player wins: winner shows 🏆 bubbles + ✔︎ tick and a motivational quote.<br>
+      5. Loser receives a single ☠️ bubble (center float).<br>
+      6. Draw shows a 🤝 bubble (center float).<br>
+      7. Scores and match history update automatically.<br>
+      <button id="startBtn">Start</button>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div id="title">XO Battle Arena</div>
+    <div id="score">X: <span id="scoreX">0</span>  O: <span id="scoreO">0</span></div>
+
+    <div id="gameContainer">
+      <div id="board" role="grid" aria-label="Tic Tac Toe board"></div>
+      <div id="victoryLine" aria-hidden="true"></div>
+      <div id="bubbleLayer" aria-hidden="true"></div>
+    </div>
+
+    <div id="message"></div>
+    <div id="quote"></div>
+
+    <div class="controls">
+      <button id="restartBtn" class="ctrl">Restart Round</button>
+      <button id="resetAllBtn" class="ctrl">Reset All</button>
+    </div>
+
+    <div id="history">
+      <table>
+        <thead><tr><th>Match</th><th>Winner</th><th>Pattern</th></tr></thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+/* === Safe, defensive, single-file final implementation ===
+   - Winner emojis: 🏆 (3 per winning cell)
+   - Loser emoji: ☠️ (1 center float)
+   - Draw emoji: 🤝 (1 center float)
+   - Quotes: Option-B style (random)
+   - Rules screen: Option 1 (crimson box)
+   - Bubbles appended to bubbleLayer inside gameContainer so WebViewer shows them
+*/
+
+(() => {
+  // State
+  const board = ["","","","","","","","",""];
+  let currentPlayer = "X";
+  let gameActive = false;
+  let scoreX = 0, scoreO = 0, matchCount = 0;
+
+  // DOM
+  const startScreen = document.getElementById('startScreen');
+  const startBtn = document.getElementById('startBtn');
+  const boardEl = document.getElementById('board');
+  const bubbleLayer = document.getElementById('bubbleLayer');
+  const victoryLine = document.getElementById('victoryLine');
+  const messageEl = document.getElementById('message');
+  const quoteEl = document.getElementById('quote');
+  const scoreXEl = document.getElementById('scoreX');
+  const scoreOEl = document.getElementById('scoreO');
+  const restartBtn = document.getElementById('restartBtn');
+  const resetAllBtn = document.getElementById('resetAllBtn');
+  const historyBody = document.getElementById('historyBody');
+
+  // Patterns
+  const wins = [
+    [0,1,2,"Row 1"],
+    [3,4,5,"Row 2"],
+    [6,7,8,"Row 3"],
+    [0,3,6,"Column 1"],
+    [1,4,7,"Column 2"],
+    [2,5,8,"Column 3"],
+    [0,4,8,"Diagonal 1"],
+    [2,4,6,"Diagonal 2"]
+  ];
+
+  // Option-B quotes (User chose B)
+  const winnerQuotes = [
+    "You dominated the arena!",
+    "Flawless victory!",
+    "You outplayed with style!"
+  ];
+  const loserQuotes = [
+    "Defeat is just a comeback in disguise.",
+    "Even legends fall — rise again.",
+    "Not your round… but the battle continues."
+  ];
+  const drawQuotes = [
+    "A balanced duel — well played.",
+    "Neither bowed, neither broken.",
+    "A fair fight with no victor."
+  ];
+
+  // Create board cells
+  const cells = [];
+  for (let i=0; i<9; i++){
+    const div = document.createElement('div');
+    div.className = 'cell';
+    div.dataset.index = i;
+    div.setAttribute('role','button');
+    div.setAttribute('aria-label', 'cell '+i);
+    // click handler (no touchstart to avoid early events)
+    div.addEventListener('click', onCellClick);
+    boardEl.appendChild(div);
+    cells.push(div);
+  }
+
+  // Start button
+  startBtn.addEventListener('click', () => {
+    startScreen.style.display = 'none';
+    gameActive = true;
+    clearBoardUI();
+  });
+
+  // Restart round: clear board, keep scores
+  restartBtn.addEventListener('click', () => {
+    resetBoard();
+  });
+
+  // Reset all: board + scores + history
+  resetAllBtn.addEventListener('click', () => {
+    scoreX = 0; scoreO = 0; matchCount = 0;
+    scoreXEl.textContent = scoreX; scoreOEl.textContent = scoreO;
+    historyBody.innerHTML = '';
+    resetBoard();
+  });
+
+  // Handle cell click
+  function onCellClick(e){
+    if (!gameActive) return;
+    const idx = Number(e.currentTarget.dataset.index);
+    if (board[idx] !== "") return;
+
+    board[idx] = currentPlayer;
+    e.currentTarget.textContent = currentPlayer;
+    e.currentTarget.classList.add('disabled');
+
+    const win = checkWin();
+    if (win) {
+      // display victory
+      handleWin(win);
+      return;
+    }
+
+    if (!board.includes("")) {
+      handleDraw();
+      return;
+    }
+
+    // toggle
+    currentPlayer = currentPlayer === "X" ? "O" : "X";
+  }
+
+  // Check win returns {a,b,c,pattern} or null
+  function checkWin(){
+    for (const w of wins){
+      const [a,b,c,pattern] = w;
+      if (board[a] && board[a] === board[b] && board[b] === board[c]) {
+        return {a,b,c,pattern};
+      }
+    }
+    return null;
+  }
+
+  // Handle a win
+  function handleWin({a,b,c,pattern}){
+    gameActive = false;
+    // update scores
+    if (currentPlayer === "X") scoreX++; else scoreO++;
+    scoreXEl.textContent = scoreX; scoreOEl.textContent = scoreO;
+
+    // show message + quote
+    messageEl.textContent = currentPlayer + " Wins! ✔";
+    quoteEl.textContent = winnerQuotes[Math.floor(Math.random()*winnerQuotes.length)];
+
+    // draw victory line
+    drawVictoryLine(a,b,c);
+
+    // spawn winner bubbles from each winning cell (3 per cell)
+    spawnWinnerBubblesFromCells([a,b,c]);
+
+    // spawn single loser bubble in center area (Option B)
+    spawnCenterBubble("☠️");
+
+    // update history
+    matchCount++;
+    appendHistory(matchCount, currentPlayer, pattern);
+  }
+
+  // Handle draw
+  function handleDraw(){
+    gameActive = false;
+    messageEl.textContent = "Draw!";
+    quoteEl.textContent = drawQuotes[Math.floor(Math.random()*drawQuotes.length)];
+
+    // spawn draw bubble center
+    spawnCenterBubble("🤝");
+
+    matchCount++;
+    appendHistory(matchCount, "Draw", "None");
+  }
+
+  // Append history row
+  function appendHistory(match, winner, pattern){
+    const tr = document.createElement('tr');
+    const td1 = document.createElement('td'); td1.textContent = match;
+    const td2 = document.createElement('td'); td2.textContent = winner;
+    const td3 = document.createElement('td'); td3.textContent = pattern;
+    tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+    historyBody.appendChild(tr);
+  }
+
+  // Spawn winner bubbles from specific cells
+  function spawnWinnerBubblesFromCells(indices){
+    // each cell: spawn 3 trophy bubbles with slight random offsets
+    indices.forEach((idx) => {
+      const cell = cells[idx];
+      const rect = cell.getBoundingClientRect();
+      const containerRect = boardEl.getBoundingClientRect();
+      // coordinates relative to boardEl
+      const baseX = rect.left - containerRect.left + rect.width/2;
+      const baseY = rect.top - containerRect.top + rect.height/2;
+      // spawn 3 bubbles
+      for (let i=0;i<3;i++){
+        spawnBubbleAt(baseX + (Math.random()*30 - 15), baseY + (Math.random()*20 - 10), "🏆");
+      }
+    });
+  }
+
+  // Spawn a center bubble (loser or draw)
+  function spawnCenterBubble(emoji){
+    const containerRect = boardEl.getBoundingClientRect();
+    const cx = containerRect.width/2;
+    const cy = containerRect.height/2;
+    spawnBubbleAt(cx, cy, emoji);
+  }
+
+  // Create a bubble positioned at board-relative coordinates (x,y)
+  function spawnBubbleAt(x, y, emoji){
+    const b = document.createElement('div');
+    b.className = 'bubble';
+    b.textContent = emoji;
+    // position inside bubbleLayer (coordinates relative to boardEl)
+    b.style.left = (x - 18) + 'px'; // adjust small offset so bubble center aligns
+    b.style.top = (y - 30) + 'px';
+    bubbleLayer.appendChild(b);
+    // remove after animation
+    setTimeout(() => {
+      try{ b.remove(); } catch(e){}
+    }, 1300);
+  }
+
+  // Draw victory line: simple rotated div from center of first cell to center of last cell
+  function drawVictoryLine(a,b,c){
+    victoryLine.innerHTML = ''; // clear old
+    const ra = cells[a].getBoundingClientRect();
+    const rc = cells[c].getBoundingClientRect();
+    const parentRect = boardEl.getBoundingClientRect();
+
+    const ax = ra.left + ra.width/2 - parentRect.left;
+    const ay = ra.top + ra.height/2 - parentRect.top;
+    const cx = rc.left + rc.width/2 - parentRect.left;
+    const cy = rc.top + rc.height/2 - parentRect.top;
+
+    const dx = cx - ax;
+    const dy = cy - ay;
+    const length = Math.sqrt(dx*dx + dy*dy);
+    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+    const line = document.createElement('div');
+    line.className = 'lineDiv';
+    line.style.width = (length + 10) + 'px';
+    line.style.left = (ax - 5) + 'px';
+    line.style.top = (ay - 3) + 'px';
+    line.style.transform = 'rotate(' + angle + 'deg)';
+    victoryLine.appendChild(line);
+  }
+
+  // Reset board (clear marks, keep scores/history)
+  function resetBoard(){
+    for (let i=0;i<9;i++){
+      board[i] = "";
+      cells[i].textContent = "";
+      cells[i].classList.remove('disabled');
+    }
+    gameActive = true;
+    currentPlayer = "X";
+    messageEl.textContent = '';
+    quoteEl.textContent = '';
+    victoryLine.innerHTML = '';
+    // clear bubbles if any
+    bubbleLayer.innerHTML = '';
+  }
+
+  // Clear UI initial
+  function clearBoardUI(){
+    // make sure board is clean and game active
+    resetBoard();
+    scoreXEl.textContent = scoreX;
+    scoreOEl.textContent = scoreO;
+  }
+
+  // Defensive vibration helper
+  function vibrate(ms){
+    try{ if (navigator.vibrate) navigator.vibrate(ms); } catch(e){}
+  }
+
+  // Append small delay after load to ensure layout is ready
+  window.addEventListener('load', () => {
+    // nothing special — waiting for user to press Start
+  });
+
+  // Exported for debugging (dev only, safe)
+  window.__xo = { resetBoard, resetAll: () => { scoreX=0;scoreO=0;historyBody.innerHTML=''; resetBoard(); } };
+
+})();
+</script>
+</body>
+</html>
